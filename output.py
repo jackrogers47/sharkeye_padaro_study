@@ -78,6 +78,9 @@ def save_image_with_bbox(image, filename, path):
 
 
 def output(final_shark_list, low_conf_objects):
+
+    if not os.path.exists(os.path.join(os.getcwd(),'results')):
+        os.makedirs('results')
     
     #TODO make this more robust
 
@@ -122,7 +125,8 @@ def output(final_shark_list, low_conf_objects):
         frame_filename = 'track_' + str(o.id)
         save_image_with_bbox(draw_max_conf_bounding_box(o.max_conf_frame, o.box, o.id, o.max_conf), frame_filename, low_conf_images_path)
 
-
     
     shark_df.to_csv(os.path.join(high_conf_path, 'high_confidence_detections.csv'))
     low_conf_obj_df.to_csv(os.path.join(low_conf_path, 'low_confidence_detections.csv'))
+
+
