@@ -21,7 +21,6 @@ def convert_bbox_center_to_corners(x_center, y_center, width, height):
 
 
 def draw_max_conf_bounding_box(image, bbox, object_id, max_conf):
-    print('yes')
     x, y, width, height = bbox
 
     # Convert float coordinates to integers
@@ -39,14 +38,13 @@ def draw_max_conf_bounding_box(image, bbox, object_id, max_conf):
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 0.6
     font_thickness = 1
-    text_size = cv2.getTextSize(text, font, font_scale, font_thickness)[0]
+    # text_size = cv2.getTextSize(text, font, font_scale, font_thickness)[0]
     text_position = (xbr - 30, ybr + 30)
     cv2.putText(image, text, text_position, font, font_scale, color, font_thickness)
     return image 
 
 
 def draw_bounding_box(image, bbox, object_id, size, measured_on):
-    print('yes')
     x, y, width, height = bbox
 
     # Convert float coordinates to integers
@@ -78,7 +76,6 @@ def save_image_with_bbox(image, filename, path):
 
 
 def output(final_shark_list, low_conf_objects):
-
     if not os.path.exists(os.path.join(os.getcwd(),'results')):
         os.makedirs('results')
     
@@ -110,7 +107,7 @@ def output(final_shark_list, low_conf_objects):
 
     for s in final_shark_list:
         row_df = pd.DataFrame([{'Object_ID': s.id, 'Size_(ft)': s.size, 'Measured_On': s.measured_on, 'Timestamp': s.timestamp, 'Max_Confidence': s.max_conf}])
-        #TODO: fix, in fute will not be able to concatenate to empty df
+        #TODO: fix, in future versions of pandas, we will not be able to concatenate to empty df
         shark_df = pd.concat([shark_df, row_df], ignore_index=True)
 
         frame_filename = 'track_' + str(s.id)
@@ -119,7 +116,7 @@ def output(final_shark_list, low_conf_objects):
     low_conf_obj_df = pd.DataFrame(columns=['Object_ID', 'Size_(ft)', 'Measured_On', 'Timestamp', 'Max_Confidence'])
     for o in low_conf_objects:
         row_df = pd.DataFrame([{'Object_ID': o.id, 'Size_(ft)': o.size, 'Measured_On': o.measured_on, 'Timestamp': o.timestamp, 'Max_Confidence': o.max_conf}])
-        #TODO: fix, in fute will not be able to concatenate to empty df
+        #TODO: fix, in future versions of pandas, we will not be able to concatenate to empty df
         low_conf_obj_df = pd.concat([low_conf_obj_df, row_df], ignore_index=True)
 
         frame_filename = 'track_' + str(o.id)
@@ -128,5 +125,6 @@ def output(final_shark_list, low_conf_objects):
     
     shark_df.to_csv(os.path.join(high_conf_path, 'high_confidence_detections.csv'))
     low_conf_obj_df.to_csv(os.path.join(low_conf_path, 'low_confidence_detections.csv'))
+
 
 

@@ -10,8 +10,6 @@ def pixels_to_feet(altitude, pixel_size, original_fw):
     return size_m * 3.28084
 
 
-
-
 class Track:
 
     def __init__(self, id, box, conf, frame, timestamp):
@@ -68,17 +66,28 @@ class Track:
                 self.measured_on = 'non_diag'
                 self.sizing_frame = frame
                 self.sizing_box = box
-        print(size)
         
         #get shark size, if shark size> than ; maybe only take length from measurements over high conf thresh
 
 class SharkTracker:
 
+    
     def __init__(self, altitude, desired_frame_rate, high_conf_threshold=.69):
+        # list of Track objects 
         self.tracks = []
         self.altitude = altitude
-        # the multiplier can be adjusted
-        limit = round(1/2 * desired_frame_rate)
+
+        # high_conf_threshold and high_conf_det_limit defenitions: 
+
+        # high_conf_det_limit is the number of detections a Track object needs to have with confidence greater than high_cof_threshold
+        # to set Track.confirmed to True therefore indicating that there is high confidence this Track object is a shark
+        # 
+        # high_conf_det_limit should be proportional to the frame rate at which we are sampling from the original video and is decided 
+        # with frame_limit_multiplier and must be 2 or greater (frame_limit_multiplier is adjustable but currently set to 0.5)
+        #
+        # high_conf_threshold is adjustable but currently set to 0.69 
+        frame_limit_multiplier = .5
+        limit = round(frame_limit_multiplier * desired_frame_rate)
         if limit < 2:
             self.high_conf_det_limit = 2
         else:
@@ -86,10 +95,12 @@ class SharkTracker:
         self.high_conf_threshold = high_conf_threshold
 
 
-    def update_tracker(self, detections_list, frame, original_fw, timestamp): #detection list in format [[id, xywh, conf], ...]
-        #if it exists update, if it is new make a new one for it
-
+    def update_tracker(self, detections_list, frame, original_fw, timestamp): #detection list in format [[id1, xywh1, conf1], [id2, xywh2, conf2],...]
+        
+        # get list of all track ID's previously detected
         existing_track_ids = [x.id for x in self.tracks]
+        # for all detections in this frame, if a detected object's id is in existing_track_ids, then update the track object with information from 
+        # this frame's detection; if a detected object's id is not already being tracked, then make a new Track object for it and append it to SharkTracker.tracks
         for det in detections_list:
             if det[0] in existing_track_ids:
                 [x for x in self.tracks if x.id == det[0]][0].update_track(det[1],
@@ -104,16 +115,6 @@ class SharkTracker:
                 self.tracks.append(new_track)
                
         return self.tracks
-
-
-
-    
-                
-
-            
-
-
-
 
 
 

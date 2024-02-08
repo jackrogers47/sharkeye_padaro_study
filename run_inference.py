@@ -5,107 +5,117 @@ import argparse
 
 from ultralytics import YOLO
 
-from video_processing import ar_resize, draw_bounding_box, save_image_with_bbox
+from video_processing import ar_resize
 from tracker_logic import Track, SharkTracker
-from output import output
+from output import output, draw_bounding_box
 
+
+#helper function for timestamping - in progress not working properly
 def seconds_to_minutes_and_seconds(seconds):
     minutes, seconds = divmod(seconds, 60)
     return str(minutes) + ':' + str(round(seconds)) 
 
 
-def run_inference(gpu=False, imgsz=720, video_dir='test_vids', altitude=40):
-    #load the model
-    model = YOLO('model_weights/exp1v8sbest.pt')
+# gpu = True if Apple mps is available
+# imgsz = desired pixel width for inference
+# video_dir = directory of videos to run inference on
+# altitude = set target altitude of transect, default = 30
+def run_inference(gpu=False, imgsz=720, video_dir='survey_video', altitude=30):
 
-    #select optimal frame rate for device
+    #load the model with the weights located at weights path
+    weights_path = 'model_weights/exp1v8sbest.pt'
+    model = YOLO(weights_path)
+
+    #assign desired frame rate for inference based on the availability of Apple mps gpu, we will sample our 
+    # survey videos at the desired frame rate before running inference on them
     if gpu:
         desired_frame_rate = 8
     elif not gpu:
         desired_frame_rate = 4
 
-    print(desired_frame_rate)
-    
     # make function to concatenate videos if needed here
 
-    # will return list of videos for inference (full file path to videos)
+    #list of full file paths to videos for each video in video_dir which in default is survey_video
     videos = [os.path.join(video_dir, file) for file in os.listdir(video_dir) if not file.startswith('.')]
 
+    #initiate list to save all high confidence sharks 
     final_shark_list = []
+    #initiate list to save all low confidence tracked objects
     final_low_conf_tracks_list = []
-    shark_count = 0
 
+    #iterate through each video in the videos list
     for video in videos:
         cap = cv2.VideoCapture(video)
+
         original_frame_width = cap.get(3)
+        original_frame_height = cap.get(4)
 
-        # get h, w for model.track to resize image with
-        # TODO might need to resize and reduce frame rate before inference to conserve memory
-        new_imgsz = ar_resize(cap.get(3), cap.get(4), imgsz)
+        # given the original frame width and height and desired pixel width, return the desired [pixel_height, pixel_width] 
+        # to resize images to before running inference that maintains the original aspect ratio
+        resize_img_w_and_h = ar_resize(original_frame_width, original_frame_height, imgsz)
         
-        # find the rate to sample the video to ge tthe desired frame rate
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        frame_sample_rate = round(fps/desired_frame_rate)
+        # get original frame rate
+        original_fps = cap.get(cv2.CAP_PROP_FPS)
+        # get rate at which to sample survey_video
+        frame_sample_rate = round(original_fps/desired_frame_rate)
 
-        #initiate tracker
+        #initiate tracker object 
         st = SharkTracker(altitude, desired_frame_rate)
-        print(st.high_conf_det_limit)
 
         frame_no = 0
+
+        #iterate over each frame in video
         while cap.isOpened():
             success = cap.grab()
 
             #reducing video frame rate here
             if success and frame_no % frame_sample_rate == 0:
                 _, frame = cap.retrieve()
+
+                # running inference here, results[0] has attributes boxes, id, conf, which are lists 
+                # containing the ids, bounding boxes, and confidence  information about each detection in frame
+
+                # note: frame rate should relate to how we set iou
+                # conf = min confidence to make a detection
                 if gpu:
-                    #TODO test if yolo resizing works and is efficient
-                    results = model.track(frame, conf=.45, device='mps', imgsz=new_imgsz, iou=0.4, show=True, verbose=False, persist=True)
+                    results = model.track(frame, conf=.41, device='mps', imgsz=resize_img_w_and_h, iou=0.39, show=True, verbose=False, persist=True)
                 elif not gpu:
-                    results = model.track(frame, conf=.45, imgsz=new_imgsz, iou=0.4, show=True, verbose=False, persist=True)
-                # Get the boxes ,classes and track IDs
+                    results = model.track(frame, conf=.41, imgsz=resize_img_w_and_h, iou=0.39, show=True, verbose=False, persist=True)
+                
+                # Get the boxes ,classes and track IDs of frame
                 boxes = results[0].boxes.xywh.cpu().tolist()
                 confidence = results[0].boxes.conf.cpu().tolist() 
-                # print(boxes)
                 track_ids = results[0].boxes.id
+                # handles a yolo empty list error
                 if track_ids == None:
                     track_ids = []
                 else:
                     track_ids= track_ids.cpu().tolist()
                     
-                timestamp = seconds_to_minutes_and_seconds(cap.get(cv2.CAP_PROP_POS_MSEC)/fps)
+                timestamp = 'na'
 
                 detections_list = zip(track_ids, boxes, confidence)
-                all_tracks = st.update_tracker(detections_list, frame, original_frame_width, timestamp)
 
-                # classes = results[0].boxes.cls.cpu().tolist()
-                # names = results[0].names
-                #print(track_ids)
-                # print(classes)
-                # print(names)
-                #print(boxes)
-                #print(track_ids)
-                #print(confidence)
+                #update tracker with detections from frame, returns an appended list of all tracked items
+                all_tracks = st.update_tracker(detections_list, frame, original_frame_width, timestamp)
 
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
-                
+            
+            # exits the loop if the video is over
             elif not success:
                 break
 
             frame_no += 1
         
-        #TODO are they sorted by object id 
 
 
         for trk in all_tracks:
             if trk.confirmed:
                 final_shark_list.append(trk)
-                shark_count += 1
             else:
                 final_low_conf_tracks_list.append(trk)
 
-    # create and delete directories as needed
 
     # save ann info
     output(final_shark_list, final_low_conf_tracks_list)
@@ -119,7 +129,7 @@ def parse_opt():
     parser.add_argument('--gpu', action =argparse.BooleanOptionalAction, help='True or False this is a Macbook with an m1, m2, or m3 chip')
     parser.add_argument('--imgsz', type=int, default=720, help='image height for inference (pixels)')
     parser.add_argument('--video_dir', type=str, default='survey_video', help='folder where videos to process exist')
-    parser.add_argument('--altitude', type=int, default=40, help='survey flight altitude (meters)')
+    parser.add_argument('--altitude', type=int, default=30, help='survey flight altitude (meters)')
     opt = parser.parse_args()
     return opt
 
@@ -128,7 +138,7 @@ def main(opt):
 
 
 if __name__=='__main__':
-    opt = parse_opt()
+    opt = parse_opt()    
     main(opt)
 
 
