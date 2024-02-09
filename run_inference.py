@@ -7,44 +7,50 @@ from ultralytics import YOLO
 
 from video_processing import ar_resize
 from tracker_logic import Track, SharkTracker
-from output import output, draw_bounding_box
+from output import output
 
 
 #helper function for timestamping - in progress not working properly
 def seconds_to_minutes_and_seconds(seconds):
-    minutes, seconds = divmod(seconds, 60)
-    return str(minutes) + ':' + str(round(seconds)) 
+    min, sec = divmod(seconds, 60)
+    if round(sec) < 10:
+        sec = '0' + str(round(sec))
+    else:
+        sec = str(round(sec))
+    return str(round(min)) + ':' + sec 
 
 
 # gpu = True if Apple mps is available
 # imgsz = desired pixel width for inference
 # video_dir = directory of videos to run inference on
 # altitude = set target altitude of transect, default = 30
-def run_inference(gpu=False, imgsz=720, video_dir='survey_video', altitude=30):
+def run_inference(gpu=False, imgsz=720, video_dir='survey_video', altitude=40):
 
     #load the model with the weights located at weights path
     weights_path = 'model_weights/exp1v8sbest.pt'
     model = YOLO(weights_path)
 
-    #assign desired frame rate for inference based on the availability of Apple mps gpu, we will sample our 
-    # survey videos at the desired frame rate before running inference on them
-    if gpu:
-        desired_frame_rate = 8
-    elif not gpu:
-        desired_frame_rate = 4
 
-    # make function to concatenate videos if needed here
+    desired_frame_rate = 8
 
     #list of full file paths to videos for each video in video_dir which in default is survey_video
-    videos = [os.path.join(video_dir, file) for file in os.listdir(video_dir) if not file.startswith('.')]
+    # videos = [os.path.join(video_dir, file) for file in os.listdir(video_dir) if not file.startswith('.')]
 
-    #initiate list to save all high confidence sharks 
+    video_filenames = [vid_filename for vid_filename in os.listdir(video_dir) if not vid_filename.startswith('.')]
+
+
+    #initiate list to save all sharks 
     final_shark_list = []
-    #initiate list to save all low confidence tracked objects
-    final_low_conf_tracks_list = []
+
 
     #iterate through each video in the videos list
-    for video in videos:
+    for video_filename in video_filenames:
+        video = os.path.join(video_dir, video_filename)
+        
+        video_filename_splits = video_filename.split('.')[0].split('_')
+        date = video_filename_splits[0]
+        video_number = video_filename_splits[1]
+
         cap = cv2.VideoCapture(video)
 
         original_frame_width = cap.get(3)
@@ -92,16 +98,14 @@ def run_inference(gpu=False, imgsz=720, video_dir='survey_video', altitude=30):
                 else:
                     track_ids= track_ids.cpu().tolist()
                     
-                timestamp = 'na'
+                timestamp = seconds_to_minutes_and_seconds(cap.get(cv2.CAP_PROP_POS_MSEC) / 1000)
 
                 detections_list = zip(track_ids, boxes, confidence)
 
                 #update tracker with detections from frame, returns an appended list of all tracked items
-                all_tracks = st.update_tracker(detections_list, frame, original_frame_width, timestamp)
+                all_tracks = st.update_tracker(detections_list, frame, original_frame_width, timestamp, date, video_number)
 
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-            
+               
             # exits the loop if the video is over
             elif not success:
                 break
@@ -109,16 +113,12 @@ def run_inference(gpu=False, imgsz=720, video_dir='survey_video', altitude=30):
             frame_no += 1
         
 
-
         for trk in all_tracks:
-            if trk.confirmed:
-                final_shark_list.append(trk)
-            else:
-                final_low_conf_tracks_list.append(trk)
-
+            final_shark_list.append(trk)
+            
 
     # save ann info
-    output(final_shark_list, final_low_conf_tracks_list)
+    output(final_shark_list)
 
 
     #return final shark list
@@ -127,9 +127,9 @@ def run_inference(gpu=False, imgsz=720, video_dir='survey_video', altitude=30):
 def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu', action =argparse.BooleanOptionalAction, help='True or False this is a Macbook with an m1, m2, or m3 chip')
-    parser.add_argument('--imgsz', type=int, default=720, help='image height for inference (pixels)')
+    parser.add_argument('--imgsz', type=int, default=720, help='image height (in pixels) for inference')
     parser.add_argument('--video_dir', type=str, default='survey_video', help='folder where videos to process exist')
-    parser.add_argument('--altitude', type=int, default=30, help='survey flight altitude (meters)')
+    parser.add_argument('--altitude', type=int, default=40, help='survey flight altitude (meters)')
     opt = parser.parse_args()
     return opt
 

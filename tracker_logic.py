@@ -12,7 +12,7 @@ def pixels_to_feet(altitude, pixel_size, original_fw):
 
 class Track:
 
-    def __init__(self, id, box, conf, frame, timestamp):
+    def __init__(self, id, box, conf, frame, timestamp, date, video_number):
         self.id = id
         self.box = box
         self.top_confs = [conf]
@@ -23,9 +23,10 @@ class Track:
         #call shark sizing here
         self.size = 0
         self.timestamp = timestamp
+        self.date = date
+        self.video_number = video_number
 
         #TODO: implement timestamp attribute 
-        #TODO draw boxes on save frames, especially for low conf tracklets
 
         self.max_conf_frame = frame
         self.sizing_frame = frame
@@ -95,7 +96,7 @@ class SharkTracker:
         self.high_conf_threshold = high_conf_threshold
 
 
-    def update_tracker(self, detections_list, frame, original_fw, timestamp): #detection list in format [[id1, xywh1, conf1], [id2, xywh2, conf2],...]
+    def update_tracker(self, detections_list, frame, original_frame_width, timestamp, date, video_number): #detection list in format [[id1, xywh1, conf1], [id2, xywh2, conf2],...]
         
         # get list of all track ID's previously detected
         existing_track_ids = [x.id for x in self.tracks]
@@ -109,9 +110,9 @@ class SharkTracker:
                                                                            self.altitude,
                                                                            self.high_conf_det_limit,
                                                                            self.high_conf_threshold,
-                                                                           original_fw)
+                                                                           original_frame_width)
             else:
-                new_track = Track(det[0], det[1], det[2], frame, timestamp)
+                new_track = Track(det[0], det[1], det[2], frame, timestamp, date, video_number)
                 self.tracks.append(new_track)
                
         return self.tracks

@@ -20,7 +20,7 @@ def convert_bbox_center_to_corners(x_center, y_center, width, height):
     return top_left_x, top_left_y, bottom_right_x, bottom_right_y
 
 
-def draw_max_conf_bounding_box(image, bbox, object_id, max_conf):
+def draw_max_conf_bounding_box(image, bbox, object_id):
     x, y, width, height = bbox
 
     # Convert float coordinates to integers
@@ -34,7 +34,7 @@ def draw_max_conf_bounding_box(image, bbox, object_id, max_conf):
     cv2.rectangle(image, (xtl, ytl), (xbr, ybr), color, thickness)
 
     # Display object information
-    text = f"Object ID: {object_id}, Confidence: {max_conf:.2f}"
+    text = f"Object ID: {object_id}"
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 0.6
     font_thickness = 1
@@ -43,7 +43,7 @@ def draw_max_conf_bounding_box(image, bbox, object_id, max_conf):
     cv2.putText(image, text, text_position, font, font_scale, color, font_thickness)
     return image 
 
-
+'''
 def draw_bounding_box(image, bbox, object_id, size, measured_on):
     x, y, width, height = bbox
 
@@ -66,6 +66,7 @@ def draw_bounding_box(image, bbox, object_id, size, measured_on):
     text_position = (xbr - 30, ybr + 30)
     cv2.putText(image, text, text_position, font, font_scale, color, font_thickness)
     return image 
+'''
 
 
 def save_image_with_bbox(image, filename, path):
@@ -74,8 +75,7 @@ def save_image_with_bbox(image, filename, path):
 
 
 
-
-def output(final_shark_list, low_conf_objects):
+def output(final_shark_list):
     if not os.path.exists(os.path.join(os.getcwd(),'results')):
         os.makedirs('results')
     
@@ -94,37 +94,32 @@ def output(final_shark_list, low_conf_objects):
 
     survey_filename = 'survey' + str(survey_number)
     survey_path = os.path.join('results', survey_filename)
+
+    images_for_verification_path = os.path.join(survey_path, 'images_for_manual_verification')
+    os.makedirs(images_for_verification_path)
+
     
-    high_conf_path = os.path.join(survey_path, 'high_confidence_sharks')
-    high_conf_images_path = os.path.join(high_conf_path, 'frames_used_for_sizing')
-    os.makedirs(high_conf_images_path)
-
-    low_conf_path = os.path.join(survey_path, 'low_confidence_objects')
-    low_conf_images_path = os.path.join(low_conf_path, 'max_confidence_frames')
-    os.makedirs(low_conf_images_path)
-
-    shark_df = pd.DataFrame(columns=['Object_ID', 'Size_(ft)', 'Measured_On', 'Timestamp', 'Max_Confidence'])
-
+    shark_df = pd.DataFrame(columns=['Object_ID', 'Date', 'Video_Number', 'Timestamp', 'Size_(ft)', 'Measured_On',  'Confidence_Category'])
     for s in final_shark_list:
-        row_df = pd.DataFrame([{'Object_ID': s.id, 'Size_(ft)': s.size, 'Measured_On': s.measured_on, 'Timestamp': s.timestamp, 'Max_Confidence': s.max_conf}])
+        if s.confirmed:
+            conf_category = 'high'
+        else:
+            conf_category = 'low'
+        row_df = pd.DataFrame([{'Object_ID': s.id, 
+                                'Date': s.date, 
+                                'Video_Number': s.video_number,
+                                'Timestamp': s.timestamp,
+                                'Size_(ft)': s.size, 
+                                'Measured_On': s.measured_on,  
+                                'Confidence_Category': conf_category}])
+        
         #TODO: fix, in future versions of pandas, we will not be able to concatenate to empty df
         shark_df = pd.concat([shark_df, row_df], ignore_index=True)
 
-        frame_filename = 'track_' + str(s.id)
-        save_image_with_bbox(draw_bounding_box(s.sizing_frame, s.sizing_box, s.id, s.size, s.measured_on), frame_filename, high_conf_images_path)
-
-    low_conf_obj_df = pd.DataFrame(columns=['Object_ID', 'Size_(ft)', 'Measured_On', 'Timestamp', 'Max_Confidence'])
-    for o in low_conf_objects:
-        row_df = pd.DataFrame([{'Object_ID': o.id, 'Size_(ft)': o.size, 'Measured_On': o.measured_on, 'Timestamp': o.timestamp, 'Max_Confidence': o.max_conf}])
-        #TODO: fix, in future versions of pandas, we will not be able to concatenate to empty df
-        low_conf_obj_df = pd.concat([low_conf_obj_df, row_df], ignore_index=True)
-
-        frame_filename = 'track_' + str(o.id)
-        save_image_with_bbox(draw_max_conf_bounding_box(o.max_conf_frame, o.box, o.id, o.max_conf), frame_filename, low_conf_images_path)
-
+        frame_filename = 'track_' + str(round(s.id)).rjust(5, '0')
+        save_image_with_bbox(draw_max_conf_bounding_box(s.max_conf_frame, s.box, s.id), frame_filename, images_for_verification_path)
     
-    shark_df.to_csv(os.path.join(high_conf_path, 'high_confidence_detections.csv'))
-    low_conf_obj_df.to_csv(os.path.join(low_conf_path, 'low_confidence_detections.csv'))
+    shark_df.to_csv(os.path.join(survey_path, 'inference_results_table.csv'))
 
 
 
